@@ -6,7 +6,33 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
 set(usher_VERSION "?.?.?")
-find_library(ISAL_LIB isal)
+
+include(ExternalProject)
+
+ExternalProject_Add(isa-l
+    GIT_REPOSITORY      https://github.com/intel/isa-l.git
+    GIT_TAG             v2.30.0
+    GIT_SHALLOW         true
+    GIT_PROGRESS        true
+    UPDATE_DISCONNECTED true
+    PREFIX				isa-l
+    CONFIGURE_COMMAND	""
+    BUILD_COMMAND		make -C ${PROJECT_BINARY_DIR}/isa-l/src/isa-l -f Makefile.unx prefix=${PROJECT_BINARY_DIR}/isa-l/install install
+	INSTALL_COMMAND		""
+)
+
+ExternalProject_Add(oneTBB
+    GIT_REPOSITORY      https://github.com/oneapi-src/oneTBB.git
+	GIT_TAG             2019_U9
+    GIT_SHALLOW         true
+    GIT_PROGRESS        true
+    UPDATE_DISCONNECTED true
+    PREFIX				oneTBB
+    CONFIGURE_COMMAND	""
+    BUILD_COMMAND		make -C ${PROJECT_BINARY_DIR}/oneTBB/src/oneTBB tbb_cpf=1 tbb_build_dir=${PROJECT_BINARY_DIR}/oneTBB/install tbb_build_prefix=native
+    INSTALL_COMMAND		""
+)
+
 execute_process(COMMAND head -n1 ${CMAKE_SOURCE_DIR}/version.txt OUTPUT_VARIABLE VERSION)
 string(REGEX REPLACE "^v([0-9]+)\\..*" "\\1" VERSION_MAJOR "${VERSION}")
 string(REGEX REPLACE "^v[0-9]+\\.([0-9]+).*" "\\1" VERSION_MINOR "${VERSION}")
@@ -38,10 +64,6 @@ endif()
 find_package(MPI REQUIRED)
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 include_directories(${Protobuf_INCLUDE_DIRS})
-
-include(${TBB_DIR}/cmake/TBBBuild.cmake)
-tbb_build(TBB_ROOT ${TBB_DIR} CONFIG_DIR TBB_DIR MAKE_ARGS tbb_cpf=1)
-find_package(TBB REQUIRED tbbmalloc tbbmalloc_proxy tbb_preview)
 
 FIND_PACKAGE(Boost COMPONENTS program_options iostreams filesystem date_time REQUIRED)
 
@@ -412,6 +434,40 @@ endif(SAVE_PROFILE)
 #set_property(TARGET matOptimize PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 TARGET_LINK_LIBRARIES(compareVCF PRIVATE stdc++  ${Boost_LIBRARIES} ${TBB_IMPORTED_TARGETS} ${Protobuf_LIBRARIES} ZLIB::ZLIB) # OpenMP::OpenMP_CXX)
 
+function(add_isal PRODUCT)
+	add_dependencies(${PRODUCT} isa-l)
+	target_include_directories(${PRODUCT} PUBLIC ${PROJECT_BINARY_DIR}/isa-l/install/include)
+    target_link_directories(${PRODUCT} PUBLIC ${PROJECT_BINARY_DIR}/isa-l/install/lib)
+    target_link_libraries(${PRODUCT} PUBLIC isal)
+endfunction()
+
+function(add_tbb PRODUCT)
+	add_dependencies(${PRODUCT} oneTBB)
+	target_include_directories(${PRODUCT} PUBLIC ${PROJECT_BINARY_DIR}/oneTBB/src/oneTBB/include)
+    target_link_directories(${PRODUCT} PUBLIC ${PROJECT_BINARY_DIR}/oneTBB/install/native_release)
+    target_link_libraries(${PRODUCT} PUBLIC tbb_preview tbbmalloc)
+endfunction()
+
+add_isal(check_samples_place)
+add_isal(matOptimize)
+add_isal(usher-sampled)
+add_isal(usher-sampled-server)
+add_tbb(check_samples_place)
+add_tbb(matOptimize)
+add_tbb(usher-sampled)
+add_tbb(usher-sampled-server)
+add_tbb(transpose_vcf)
+add_tbb(transposed_vcf_to_vcf)
+add_tbb(transposed_vcf_to_fa)
+add_tbb(transposed_vcf_print_name)
+add_tbb(usher)
+add_tbb(matUtils)
+add_tbb(ripples)
+add_tbb(ripples-fast)
+add_tbb(compareVCF)
+if(USHER_SERVER)
+add_tbb(usher_server)
+endif()
 
 TARGET_LINK_LIBRARIES(check_samples_place PRIVATE stdc++  ${Boost_LIBRARIES} ${TBB_IMPORTED_TARGETS} ${Protobuf_LIBRARIES} ZLIB::ZLIB  ${MPI_CXX_LIBRARIES} ${MPI_CXX_LINK_FLAGS} ${ISAL_LIB} ) # OpenMP::OpenMP_CXX)
 TARGET_LINK_LIBRARIES(matOptimize PRIVATE stdc++  ${Boost_LIBRARIES} ${TBB_IMPORTED_TARGETS} ${Protobuf_LIBRARIES} ZLIB::ZLIB  ${MPI_CXX_LIBRARIES} ${MPI_CXX_LINK_FLAGS} ${ISAL_LIB} ) # OpenMP::OpenMP_CXX)

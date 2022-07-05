@@ -15,23 +15,35 @@ ExternalProject_Add(isa-l
     GIT_SHALLOW         true
     GIT_PROGRESS        true
     UPDATE_DISCONNECTED true
-    PREFIX				isa-l
-    CONFIGURE_COMMAND	""
-    BUILD_COMMAND		make -C ${PROJECT_BINARY_DIR}/isa-l/src/isa-l -f Makefile.unx prefix=${PROJECT_BINARY_DIR}/isa-l/install install
-	INSTALL_COMMAND		""
+    PREFIX				      isa-l
+    CONFIGURE_COMMAND	  ""
+    BUILD_COMMAND		    make -C ${PROJECT_BINARY_DIR}/isa-l/src/isa-l -f Makefile.unx prefix=${PROJECT_BINARY_DIR}/isa-l/install install
+	  INSTALL_COMMAND		  ""
 )
 
 ExternalProject_Add(oneTBB
     GIT_REPOSITORY      https://github.com/oneapi-src/oneTBB.git
-	GIT_TAG             2019_U9
+  	GIT_TAG             2019_U9
     GIT_SHALLOW         true
     GIT_PROGRESS        true
     UPDATE_DISCONNECTED true
-    PREFIX				oneTBB
-    CONFIGURE_COMMAND	""
-    BUILD_COMMAND		make -C ${PROJECT_BINARY_DIR}/oneTBB/src/oneTBB tbb_cpf=1 tbb_build_dir=${PROJECT_BINARY_DIR}/oneTBB/install tbb_build_prefix=native
-    INSTALL_COMMAND		""
+    PREFIX				      oneTBB
+    CONFIGURE_COMMAND	  ""
+    BUILD_COMMAND		    make -C ${PROJECT_BINARY_DIR}/oneTBB/src/oneTBB tbb_cpf=1 tbb_build_dir=${PROJECT_BINARY_DIR}/oneTBB/install tbb_build_prefix=native
+    INSTALL_COMMAND		  ""
 )
+
+ExternalProject_Add(larch-lib
+    GIT_REPOSITORY      https://github.com/matsengrp/larch.git
+  	GIT_TAG             12-add-install-target 
+    GIT_SHALLOW         true
+    GIT_PROGRESS        true
+    UPDATE_DISCONNECTED true
+    CMAKE_ARGS          -DCMAKE_INSTALL_PREFIX=${PROJECT_BINARY_DIR}/larch-lib/install
+		PREFIX				      larch-lib
+    INSTALL_DIR         larch-lib/install
+)
+
 
 execute_process(COMMAND head -n1 ${CMAKE_SOURCE_DIR}/version.txt OUTPUT_VARIABLE VERSION)
 string(REGEX REPLACE "^v([0-9]+)\\..*" "\\1" VERSION_MAJOR "${VERSION}")
@@ -448,6 +460,13 @@ function(add_tbb PRODUCT)
     target_link_libraries(${PRODUCT} PUBLIC tbb_preview tbbmalloc)
 endfunction()
 
+function(add_larch PRODUCT)
+	add_dependencies(${PRODUCT} larch-lib)
+	target_include_directories(${PRODUCT} PUBLIC ${PROJECT_BINARY_DIR}/larch-lib/src/larch/include)
+    target_link_directories(${PRODUCT} PUBLIC ${PROJECT_BINARY_DIR}/larch-lib/install/lib)
+    target_link_libraries(${PRODUCT} PUBLIC larch)
+endfunction()
+
 add_isal(check_samples_place)
 add_isal(matOptimize)
 add_isal(usher-sampled)
@@ -468,6 +487,7 @@ add_tbb(compareVCF)
 if(USHER_SERVER)
 add_tbb(usher_server)
 endif()
+add_larch(usher-sampled)
 
 TARGET_LINK_LIBRARIES(check_samples_place PRIVATE stdc++  ${Boost_LIBRARIES} ${TBB_IMPORTED_TARGETS} ${Protobuf_LIBRARIES} ZLIB::ZLIB  ${MPI_CXX_LIBRARIES} ${MPI_CXX_LINK_FLAGS} ${ISAL_LIB} ) # OpenMP::OpenMP_CXX)
 TARGET_LINK_LIBRARIES(matOptimize PRIVATE stdc++  ${Boost_LIBRARIES} ${TBB_IMPORTED_TARGETS} ${Protobuf_LIBRARIES} ZLIB::ZLIB  ${MPI_CXX_LIBRARIES} ${MPI_CXX_LINK_FLAGS} ${ISAL_LIB} ) # OpenMP::OpenMP_CXX)

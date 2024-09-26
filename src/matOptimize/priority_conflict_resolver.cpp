@@ -11,7 +11,7 @@
 #include <vector>
 
 bool Conflict_Resolver::check_single_move_no_conflict(Profitable_Moves_ptr_t& candidate_move)const {
-    int best_score=0;
+    int best_score=INT_MAX-1;
     //gather the minimium parsimony score of all the moves intersecting with this move
     candidate_move->apply_nodes([&best_score,this](MAT::Node* node) {
         if (potential_crosses[node->bfs_index]) {
@@ -60,7 +60,7 @@ char Conflict_Resolver::operator()(std::vector<Profitable_Moves_ptr_t>* candidat
     char ret=0;
     Profitable_Moves_ptr_t selected_move=nullptr;
     if (defered_nodes) {
-        defered_nodes->push_back(candidate_move[0]->src->identifier);
+        defered_nodes->push_back(candidate_move[0]->src->node_id);
     }
     for (Profitable_Moves_ptr_t& move : candidate_move) {
         move->populate_involved_nodes();
@@ -76,7 +76,7 @@ char Conflict_Resolver::operator()(std::vector<Profitable_Moves_ptr_t>* candidat
 
     if(!selected_move&&(!candidate_move.empty())) {
         for (Profitable_Moves_ptr_t move : candidate_move) {
-            deferred_moves.emplace_back(move->src->identifier,move->dst->identifier);
+            deferred_moves.emplace_back(move->src->node_id,move->dst->node_id);
         }
     }
     delete candidate_move_ptr;

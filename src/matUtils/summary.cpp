@@ -1,6 +1,7 @@
 #include "summary.hpp"
 #include "introduce.hpp" //for date parsing functions.
 #include "translate.hpp"
+#include <array>
 #include <boost/date_time/gregorian/gregorian.hpp>
 
 po::variables_map parse_summary_command(po::parsed_options parsed) {
@@ -39,7 +40,8 @@ po::variables_map parse_summary_command(po::parsed_options parsed) {
     ("threads,T", po::value<uint32_t>()->default_value(num_cores), num_threads_message.c_str())
     ("expanded-roho,E", po::bool_switch(),
      "Use to include date and other contextual information in RoHO table output. Significantly slows calculation time.")
-    ("help,h", "Print help messages");
+    ("help,h", "Print help messages")
+    ("mutation-stats,M", po::bool_switch(), "Print counts of different kinds of mutations");
     // Collect all the unrecognized options from the first pass. This will include the
     // (positional) command name, so we need to erase that.
     std::vector<std::string> opts = po::collect_unrecognized(parsed.options, po::include_positional);
@@ -192,6 +194,28 @@ std::map<std::set<std::string>,size_t> count_haplotypes(MAT::Tree* T) {
     }
     return hapmap;
 }
+static uint8_t one_hot_to_two_bit(uint8_t arg) {
+    return 31-__builtin_clz((unsigned int)arg);
+}
+void print_mut_stats(MAT::Tree* T){
+    std::array<int, 16> mut_frequency;
+    for ( auto& temp : mut_frequency) {
+        temp=0;
+    }
+    auto nodes=T->depth_first_expansion();
+    for(const auto node:nodes){
+        for(const auto& mut:node->mutations){
+            auto from=one_hot_to_two_bit(mut.par_nuc);
+            auto to=one_hot_to_two_bit(mut.mut_nuc);
+            mut_frequency[4*from+to]++;
+        }
+    }
+    for (int from=0; from<4; from++) {
+        for(int to=0;to<4;to++){
+            printf("%c->%c\t%d\n",MAT::get_nuc(1<<from),MAT::get_nuc(1<<to),mut_frequency[4*from+to]);
+        }
+    }
+}
 
 void write_haplotype_table(MAT::Tree* T, std::string filename) {
     timer.Start();
@@ -261,13 +285,18 @@ void write_sample_clades_table (MAT::Tree* T, std::string sample_clades) {
         std::vector<std::string> annotations_found (num_annotations, "None");
         for (auto a: T->rsearch(n->identifier, false)) {
             std::vector<std::string> canns = a->clade_annotations;
-            for (size_t i = 0; i < num_annotations; i++) {
+            // watch out for nodes that have fewer than expected annotations
+            size_t node_num_annotations = num_annotations;
+            if (node_num_annotations > canns.size()) {
+                node_num_annotations = canns.size();
+            }
+            for (size_t i = 0; i < node_num_annotations; i++) {
                 if (canns[i] != "" && annotations_found[i] == "None") {
                     annotations_found[i] = canns[i];
                 }
             }
             bool all_found = true;
-            for (size_t i = 0;  i < num_annotations;  i++) {
+            for (size_t i = 0;  i < annotations_found.size();  i++) {
                 if (annotations_found[i] == "None") {
                     all_found = false;
                     break;
@@ -278,7 +307,7 @@ void write_sample_clades_table (MAT::Tree* T, std::string sample_clades) {
             }
         }
         scfile << n->identifier;
-        for (size_t i = 0;  i < num_annotations;  i++) {
+        for (size_t i = 0;  i < annotations_found.size();  i++) {
             scfile << "\t" << annotations_found[i];
         }
         scfile << "\n";
@@ -386,18 +415,22 @@ void write_roho_table(MAT::Tree* T, std::string roho_file, bool get_dates) {
 
         //step 3: actually record the results.
         for (auto ms: candidate_mutations) {
-            //size_t non_c = 0;
-            //size_t sum_non = 0;
+            //ignore mutations that don't have at least 5 descendents, filter the siblings in the same way
             std::vector<size_t> all_non;
             size_t sum_wit = 0;
             for (auto cs: child_increment) {
                 if (cs.first != ms.second) {
-                    all_non.push_back(cs.second);
-                    //sum_non += cs.second;
-                    //non_c++;
+                    if (cs.second > 5) {
+                        all_non.push_back(cs.second);
+                    }
                 } else {
-                    sum_wit += cs.second;
+                    if (cs.second > 5) {
+                        sum_wit += cs.second;
+                    }
                 }
+            }
+            if ((all_non.size() == 0) || (sum_wit == 0)) {
+                continue;
             }
             float med_non;
             std::sort(all_non.begin(), all_non.end());
@@ -527,6 +560,9 @@ void summary_main(po::parsed_options parsed) {
     if (aberrant != dir_prefix) {
         write_aberrant_table(&T, aberrant);
         no_print = false;
+    }
+    if(vm["mutation-stats"].as<bool>()){
+        print_mut_stats(&T);
     }
     if (sample_clades != dir_prefix) {
         write_sample_clades_table(&T, sample_clades);
